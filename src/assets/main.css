@@ -1,0 +1,311 @@
+/* ─────────────────────────────────────────────────────────────
+   Kendi POS — Design System
+   Calm, professional, designed for 8+ hour shifts
+   ───────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surfaces ─── */
+  --bg: #0F141A;
+  --surface: #171D24;
+  --surface-2: #1F2731;
+  --surface-3: #2A3441;
+  --overlay: rgba(15, 20, 26, 0.72);
+
+  /* ─── Borders ─── */
+  --border: rgba(255, 255, 255, 0.07);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --border-emphasis: rgba(255, 255, 255, 0.24);
+
+  /* ─── Text ─── */
+  --text: #E8EDF3;
+  --text-2: #9BA6B2;
+  --text-3: #6B7681;
+  --text-inverse: #0F141A;
+
+  /* ─── Brand & Accents ─── */
+  --brand: #5BC4B8;          /* Mint teal — distinctive, calm */
+  --brand-deep: #0E7C7B;     /* For filled CTAs */
+  --brand-hover: #6FD3C7;
+  --brand-soft: rgba(91, 196, 184, 0.12);
+  --brand-line: rgba(91, 196, 184, 0.35);
+
+  /* ─── Semantic colors ─── */
+  --money: #79D38F;          /* For totals, paid amounts */
+  --money-soft: rgba(121, 211, 143, 0.12);
+  --warning: #F0B97A;
+  --warning-soft: rgba(240, 185, 122, 0.12);
+  --danger: #EB6B6B;
+  --danger-soft: rgba(235, 107, 107, 0.12);
+
+  /* ─── Type ─── */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  /* ─── Spacing scale ─── */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* ─── Radii ─── */
+  --radius-sm: 8px;
+  --radius: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 22px;
+  --radius-full: 999px;
+
+  /* ─── Shadows ─── */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.18);
+  --shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.28);
+  --shadow-xl: 0 24px 60px rgba(0, 0, 0, 0.4);
+
+  /* ─── Misc ─── */
+  --duration: 180ms;
+  --ease: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* ─── Light theme override (toggle via .light class on html) ─── */
+:root.light {
+  --bg: #F7F5EF;
+  --surface: #FFFFFF;
+  --surface-2: #F2EFE7;
+  --surface-3: #E9E5DA;
+  --overlay: rgba(15, 20, 26, 0.42);
+
+  --border: rgba(15, 20, 26, 0.08);
+  --border-strong: rgba(15, 20, 26, 0.16);
+  --border-emphasis: rgba(15, 20, 26, 0.24);
+
+  --text: #0F141A;
+  --text-2: #5F6F7E;
+  --text-3: #94A1AD;
+  --text-inverse: #FAFAF7;
+
+  --brand: #0E7C7B;
+  --brand-deep: #0A5A5A;
+  --brand-hover: #0C6E6D;
+  --brand-soft: rgba(14, 124, 123, 0.10);
+  --brand-line: rgba(14, 124, 123, 0.35);
+
+  --money: #0E7C49;
+  --money-soft: rgba(14, 124, 73, 0.10);
+  --warning: #C66B23;
+  --warning-soft: rgba(198, 107, 35, 0.10);
+  --danger: #B91D36;
+  --danger-soft: rgba(185, 29, 54, 0.10);
+}
+
+/* ─── Reset ─── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body, #app {
+  height: 100%;
+  overflow: hidden;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+  font-feature-settings: 'ss01', 'cv11';
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+input, textarea {
+  user-select: text;
+  -webkit-user-select: text;
+  font-family: inherit;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: inherit;
+  font-size: inherit;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+img, svg { display: block; max-width: 100%; }
+
+::selection { background: var(--brand-soft); color: var(--text); }
+
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: var(--radius-full);
+}
+::-webkit-scrollbar-thumb:hover { background: var(--border-emphasis); }
+
+/* ─── Numeric tabular (for prices/totals) ─── */
+.tabular { font-variant-numeric: tabular-nums; }
+
+/* ─── Utility classes ─── */
+.mono { font-family: var(--font-mono); font-feature-settings: 'tnum'; }
+
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+/* ─── Buttons (shared) ─── */
+.k-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  height: 44px;
+  padding: 0 var(--space-5);
+  border-radius: var(--radius);
+  font-weight: 600;
+  font-size: 14px;
+  transition: background var(--duration) var(--ease),
+              border-color var(--duration) var(--ease),
+              transform var(--duration) var(--ease),
+              color var(--duration) var(--ease);
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+
+.k-btn:active { transform: scale(0.98); }
+.k-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.k-btn--primary {
+  background: var(--brand-deep);
+  color: #FAFAF7;
+}
+.k-btn--primary:hover:not(:disabled) { background: var(--brand-hover); }
+
+.k-btn--ghost {
+  background: transparent;
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+.k-btn--ghost:hover:not(:disabled) {
+  background: var(--surface-2);
+  border-color: var(--border-emphasis);
+}
+
+.k-btn--subtle {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.k-btn--subtle:hover:not(:disabled) { background: var(--surface-3); }
+
+.k-btn--danger {
+  background: var(--danger-soft);
+  color: var(--danger);
+  border-color: var(--danger-soft);
+}
+.k-btn--danger:hover:not(:disabled) {
+  background: var(--danger);
+  color: #FAFAF7;
+}
+
+.k-btn--lg { height: 56px; padding: 0 var(--space-6); font-size: 16px; }
+.k-btn--sm { height: 36px; padding: 0 var(--space-4); font-size: 13px; }
+
+/* ─── Inputs (shared) ─── */
+.k-input {
+  display: block;
+  width: 100%;
+  height: 44px;
+  padding: 0 var(--space-4);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 15px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color var(--duration) var(--ease),
+              background var(--duration) var(--ease);
+}
+
+.k-input::placeholder { color: var(--text-3); }
+.k-input:focus {
+  border-color: var(--brand);
+  background: var(--surface-3);
+}
+
+/* ─── Cards ─── */
+.k-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+/* ─── Empty state ─── */
+.k-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-12) var(--space-6);
+  color: var(--text-3);
+  text-align: center;
+  gap: var(--space-3);
+}
+.k-empty svg { color: var(--text-3); opacity: 0.6; }
+.k-empty p { font-size: 14px; }
+
+/* ─── Status dots ─── */
+.k-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.k-dot--money { background: var(--money); }
+.k-dot--warning { background: var(--warning); }
+.k-dot--text-3 { background: var(--text-3); }
+
+/* ─── Animations ─── */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: none; }
+}
+.k-fade-in { animation: fade-in var(--duration) var(--ease); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
