@@ -1,44 +1,44 @@
-# Kendi POS
+ Kendi POS
 
-Sistemi profesional i shitjes per kafe dhe restaurante — i ndertuar me Vue 3, TypeScript, Pinia, IndexedDB dhe PWA.
+Professional point-of-sale system for cafes and restaurants — built with Vue 3, TypeScript, Pinia, IndexedDB and PWA.
 
-## Çfarë eshte e re ne kete version
+What's new in this version
 
-- **Dizajn i ri profesional** — paletë teal e qetë, tipografi Inter, modi i errët si default
-- **IndexedDB** zëvendëson localStorage (asnjë rrezik humbjeje të të dhënave)
-- **Menaxhim i plotë i menysë** — krijo/ndrysho/fshi kategori dhe produkte pa preku kodin
-- **PIN-based login** — më i shpejtë se email/password për staff
-- **Menaxhim i përdoruesve** — admin + banakier me role
-- **PWA** — mund të instalohet në tablet si aplikacion native
-- **Modi i errët / i ndritshëm** — togglueshëm nga cilësimet
-- **Pa hardcoded data** — krejt menjaja menaxhohet nga admin paneli
+- New professional design — calm teal palette, Inter typography, dark mode as default
+- IndexedDB replaces localStorage (no risk of data loss)
+- Full menu management — create/edit/delete categories and products without touching the code
+- PIN-based login — faster than email/password for staff
+- User management — admin + barista with roles
+- PWA — can be installed on a tablet as a native app
+- Dark / light mode — toggleable from settings
+- No hardcoded data — the entire menu is managed from the admin panel
 
-## Start i shpejtë
+ Quick start
 
-```bash
+```
 npm install
 npm run dev
 ```
 
-Hap [http://localhost:5173](http://localhost:5173)
+Open http://localhost:5173
 
-### PIN-et parazgjedhura
+ Default PINs
 
-- **Admin**: `0000`
-- **Banakier**: `1234`
+- Admin: `0000`
+- Barista: `1234`
 
-Ndryshoji në `/admin/staff` pas hyrjes së parë.
+Change them in `/admin/staff` after first login.
 
-## Struktura e projektit
+Project structure
 
 ```
 src/
 ├── App.vue                # Root component
 ├── main.ts                # Entry point (seed + bootstrap)
-├── assets/main.css        # Sistemi i dizajnit (tokens, base, utilities)
+├── assets/main.css        # Design system (tokens, base, utilities)
 ├── db/
 │   ├── index.ts           # IndexedDB schema + helpers
-│   └── seed.ts            # Te dhena fillestare (vetem ne fillim)
+│   └── seed.ts            # Initial data (only on first run)
 ├── stores/                # Pinia stores
 │   ├── auth.ts
 │   ├── categories.ts
@@ -49,43 +49,43 @@ src/
 ├── router/index.ts        # Routes + auth guards
 └── views/
     ├── LoginView.vue      # PIN keypad
-    ├── TablesView.vue     # Pamja e tavolinave
-    ├── PosView.vue        # Marrja e porosive (zemra e sistemit)
+    ├── TablesView.vue     # Tables view
+    ├── PosView.vue        # Order taking (the heart of the system)
     └── admin/
         ├── AdminLayout.vue
-        ├── MenuView.vue     # CRUD produkte/kategori
-        ├── StaffView.vue    # Menaxhim personeli
-        └── SettingsView.vue # Cilesime + zona e rrezikshme
+        ├── MenuView.vue     # CRUD products/categories
+        ├── StaffView.vue    # Staff management
+        └── SettingsView.vue # Settings + danger zone
 ```
 
-## Detaje teknike
+ Technical details
 
-### Çmimet ne cents
-Te gjitha çmimet ruhen si **integer ne cents** (jo float). €1.20 → 120.
-Kjo parandalon gabimet e rrumbullakimit. Perdor `formatMoney()` per shfaqje
-dhe `parseMoney()` per input.
+ Prices in cents
 
-### Schema e IndexedDB
-- `categories` — kategori produktesh me ngjyrë
-- `products` — produkte (index by-category)
-- `tables` — tavolina
-- `orders` — porosi (status: open / paid / cancelled)
-- `staff` — përdorues me PIN
-- `settings` — key-value për konfigurim
+All prices are stored as integers in cents (not floats). €1.20 → 120. This prevents rounding errors. Use `formatMoney()` for display and `parseMoney()` for input.
 
-### Ndryshimi i schema
-Nese ndryshon schema e DB, rrit `DB_VERSION` ne `src/db/index.ts` dhe shto
-migration ne callback-un `upgrade()`.
+ IndexedDB schema
 
-## Çka pritet ne Phase 2 (jo ende)
+- `categories` — product categories with color
+- `products` — products (indexed by category)
+- `tables` — tables
+- `orders` — orders (status: open / paid / cancelled)
+- `staff` — users with PIN
+- `settings` — key-value for configuration
 
-- Raporte (ditore, javore, mujore, Z-report)
-- Printim faturash (ESC/POS)
-- Modifikues produktesh (psh. pa qumësht, ekstra shot)
-- Historia e porosive te mbyllura
-- Fiskalizimi i plote ATK (Kosova)
-- Backend Spring Boot + sinkronizim multi-device
+ Changing the schema
 
-## License
+If you change the DB schema, increment `DB_VERSION` in `src/db/index.ts` and add a migration in the `upgrade()` callback.
 
-Privat — i pari nga Brikend Gjyliqi.
+ Planned for Phase 2 (not yet)
+
+- Reports (daily, weekly, monthly, Z-report)
+- Receipt printing (ESC/POS)
+- Product modifiers (e.g. no milk, extra shot)
+- History of closed orders
+- Full ATK fiscalization (Kosovo)
+- Spring Boot backend + multi-device sync
+
+ License
+
+Private — first of its kind by Brikend Gjyliqi.
