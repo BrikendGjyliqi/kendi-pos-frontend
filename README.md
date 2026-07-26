@@ -2,13 +2,14 @@
 
 **Vue 3 + TypeScript + Tauri desktop app** for the Kendi POS restaurant management system.
 
-Built for cafés and restaurants in Kosovo. Runs as a native Windows desktop application via Tauri, communicates with a Spring Boot backend over REST, and continues to work seamlessly when the network drops thanks to a full **offline-first architecture** backed by local SQLite.
+Built for cafés and restaurants in Kosovo. Runs as a native Windows desktop application via Tauri, communicates with a Spring Boot backend over REST, and continues to work seamlessly when the network drops thanks to a full **offline-first architecture** backed by local SQLite. Ships with an **AI Analytics Assistant** that turns natural-language business questions into live insights.
 
 ---
 
 ## Highlights
 
 - **Offline-first by design** — all critical operations (order-taking, payments, reservations, table management) work with zero connectivity. A background sync engine reconciles with the backend when it returns.
+- **AI Analytics Assistant** — ask business questions in natural Albanian ("Sa fitim pata sot?", "Cili produkt shitet me shume?") and receive answers with automatic charts. Powered by Claude Sonnet 4.5 with Text-to-SQL generation.
 - **Native desktop app** — Tauri wraps the Vue frontend into a lightweight (~6 MB) Windows executable with native file dialogs.
 - **Full table management** — drag-and-drop floor plan editor with per-table sizing and multi-section support (Main Dining / Terrace / Outdoor).
 - **Complete reservation workflow** — waiter requests → admin confirmation → automatic ARRIVED transition when the order is opened → NO_SHOW handling.
@@ -56,6 +57,10 @@ Built for cafés and restaurants in Kosovo. Runs as a native Windows desktop app
                               ┌─────────────────────────────┐
                               │   Spring Boot Backend       │
                               │   PostgreSQL (Docker)       │
+                              │                             │
+                              │   • REST API                │
+                              │   • AI Analytics endpoint   │
+                              │     (Text-to-SQL via Claude)│
                               └─────────────────────────────┘
 ```
 
@@ -122,6 +127,7 @@ Change these under `/admin/staff` after first login.
 | Routing          | Vue Router with auth guards                             |
 | Local storage    | SQLite via `tauri-plugin-sql`                           |
 | PDF generation   | jsPDF + jspdf-autotable                                 |
+| Charts           | Chart.js + vue-chartjs                                  |
 | File dialogs     | `@tauri-apps/plugin-dialog`, `@tauri-apps/plugin-fs`    |
 | Offline auth     | `bcryptjs` for local PIN validation                     |
 | Localization     | vue-i18n (Albanian, English)                            |
@@ -193,7 +199,8 @@ src/
 │       ├── SettingsView.vue
 │       ├── OrderHistoryView.vue
 │       ├── ReportsView.vue        # Z-report + monthly report (PDF export)
-│       └── StaffReportView.vue    # Per-staff analytics (PDF export)
+│       ├── StaffReportView.vue    # Per-staff analytics (PDF export)
+│       └── AIAssistantView.vue    # Natural-language business chat with charts
 └── src-tauri/                     # Rust code for Tauri desktop wrapper
     ├── src/lib.rs                 # Plugin registration (sql, dialog, fs)
     ├── capabilities/default.json  # Permissions for SQLite, dialogs, file writes
@@ -227,13 +234,48 @@ The core academic contribution of this thesis is the **offline-first data layer*
 | Reservations (create, confirm, arrive) | Yes (queued)     |
 | PDF and CSV export                     | Yes              |
 | Analytics reports                      | Requires backend |
+| AI Analytics Assistant                 | Requires backend |
 | AI invoice scanning                    | Requires backend |
 
-Reports and AI scanning are deliberately server-dependent: they are used by management during off-peak periods when connectivity is reliable, not by cashiers during service.
+Reports and AI features are deliberately server-dependent: they are used by management during off-peak periods when connectivity is reliable, not by cashiers during service.
 
 ---
 
 ## Key Features
+
+### AI Analytics Assistant
+
+A conversational business intelligence layer built on top of the operational data. The owner asks questions in natural Albanian and receives answers derived from live database queries — with automatic chart visualisation when the result is comparative or time-series.
+
+**Example questions the assistant handles today:**
+
+- "Sa fitim pata sot?" → "Sot ke pas €24.00 total shitje me 5 porosi."
+- "Cili produkt shitet me shume?" → Bar chart of top products with revenue and units
+- "Cili banakier ka bo me shume shitje sot?" → Ranked list with amounts and order counts
+- "Sa Coca-Cola kane mbet?" → Total stock across variants (Coca Cola 0.33l, Coca Cola 0/0.33l)
+- "Krahaso sot me dje" → Side-by-side comparison with percentage change
+- "Trend i shitjeve kete jave" → Line chart of daily revenue
+- "Sa rezervime kena kete jave?" → Aggregated stats plus show-up rate
+
+**How it works under the hood:**
+
+1. The frontend sends the question to `POST /api/ai/analytics`.
+2. The backend forwards it to Claude Sonnet 4.5 along with the PostgreSQL schema description and a set of formatting rules (cents-to-euros conversion, UUID handling, Albanian product-name variants).
+3. Claude generates a `SELECT` query.
+4. The backend validates the query (safety guard: `SELECT`/`WITH` only, blocks `DELETE`/`DROP`/`UPDATE`/`INSERT`/etc.) and executes it against PostgreSQL.
+5. Rows are sent back to Claude, which composes a natural Albanian answer.
+6. The backend auto-detects whether the result is chart-worthy (rankings → bar chart, time series → line chart) and returns the raw data alongside the answer.
+7. The frontend renders the answer in a chat bubble, and if `chartType` is present, renders the accompanying chart via Chart.js.
+
+**Chat quality-of-life touches:**
+
+- Chat history persists in `localStorage` and survives page reloads
+- "Kopjo" button on every AI response for quick sharing to WhatsApp or email
+- Collapsible SQL viewer under each answer for transparency (helpful during thesis defence)
+- "Pastro chat" button with confirmation to reset the conversation
+- Six suggested starter questions for first-time users
+
+The assistant currently supports read-only queries; it cannot modify data. This is a deliberate constraint enforced at the backend layer.
 
 ### Table Management with Drag-and-Drop
 
@@ -322,6 +364,7 @@ import { api } from './api/client'
 const tables = await api.get<Table[]>('/tables')
 await api.post('/reservations/requests', { ... })
 await api.patch(`/tables/${id}/position`, { positionX, positionY })
+await api.post('/ai/analytics', { question: 'Sa fitim pata sot?' })
 ```
 
 The client supports `GET`, `POST`, `PUT`, `PATCH`, and `DELETE`, handles JSON serialization automatically, and throws typed errors on non-2xx responses.
@@ -413,6 +456,7 @@ Completed for the current thesis milestone:
 - ✅ Offline-first architecture (SQLite + sync engine + pending queue)
 - ✅ Offline authentication via cached BCrypt hashes
 - ✅ AI invoice scanning
+- ✅ **AI Analytics Assistant with natural-language questions and auto-generated charts**
 - ✅ PDF and CSV export via native Tauri dialogs
 - ✅ Drag-and-drop floor plan editor
 - ✅ Full Albanian localization
@@ -426,6 +470,7 @@ Deferred to future work:
 - Fiscal integration (ATK Kosovo)
 - Receipt printing (ESC/POS thermal printer)
 - Conflict resolution for concurrent offline edits (currently last-write-wins)
+- Proactive AI insights (daily business summary, predictive stock ordering)
 
 ---
 
