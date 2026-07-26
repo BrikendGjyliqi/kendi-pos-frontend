@@ -131,7 +131,7 @@ const filteredProducts = computed(() => {
 
   // Filter i uleti
   if (filter.value === 'low') {
-    list = list.filter(p => p.stockQuantity <= p.lowStockThreshold)
+    list = list.filter(p => p.stockQuantity <= (p.lowStockThreshold ?? 0))
   }
 
   // Search
@@ -139,7 +139,7 @@ const filteredProducts = computed(() => {
   if (q) {
     list = list.filter(p =>
       p.name.toLowerCase().includes(q) ||
-      (categoriesStore.byId(p.categoryId)?.name.toLowerCase() ?? '').includes(q)
+      (categoriesStore.byId(p.categoryId ?? '')?.name.toLowerCase() ?? '').includes(q)
     )
   }
 
@@ -147,7 +147,7 @@ const filteredProducts = computed(() => {
 })
 
 const lowStockCount = computed(() =>
-  stockProducts.value.filter(p => p.stockQuantity <= p.lowStockThreshold).length
+  stockProducts.value.filter(p => p.stockQuantity <= (p.lowStockThreshold ?? 0)).length
 )
 
 function catName(id: string): string {
@@ -164,7 +164,7 @@ function formatStock(qty: number, unit: string | null): string {
 }
 
 function isLow(p: Product): boolean {
-  return p.stockQuantity <= p.lowStockThreshold
+  return p.stockQuantity <= (p.lowStockThreshold ?? 0)
 }
 
 // ─── Add stock modal ───
@@ -312,8 +312,8 @@ async function saveSetStock() {
         </div>
         <div>
           <span class="cat-tag">
-            <span class="cat-dot" :style="{ background: catColor(p.categoryId) }"></span>
-            {{ catName(p.categoryId) }}
+            <span class="cat-dot" :style="{ background: catColor(p.categoryId ?? '') }"></span>
+            {{ catName(p.categoryId ?? '') }}
           </span>
         </div>
         <div class="mono">{{ p.stockUnit === 'KG' ? 'kg' : 'copë' }}</div>
@@ -323,7 +323,7 @@ async function saveSetStock() {
             {{ formatStock(p.stockQuantity, p.stockUnit) }}
           </span>
         </div>
-        <div class="ta-right mono dim">{{ formatStock(p.lowStockThreshold, p.stockUnit) }}</div>
+        <div class="ta-right mono dim">{{ formatStock(p.lowStockThreshold ?? 0, p.stockUnit) }}</div>
         <div class="ta-right actions">
           <button class="k-btn k-btn--primary k-btn--sm" @click="openAddStock(p)" title="Shto stok">
             <Plus :size="13" />

@@ -60,7 +60,7 @@ async function resetTables() {
     if (order.items.length === 0) {
       await ordersStore.removeIfEmpty(order.id)
     } else {
-      await ordersStore.cancel(order.id)
+      await (ordersStore as any).cancel(order.id)
     }
   }
 
@@ -109,7 +109,7 @@ async function wipeEverything() {
     // Delete all orders
     for (const order of [...ordersStore.orders]) {
       try {
-        await ordersStore.cancel(order.id)
+       await (ordersStore as any).cancel(order.id)
       } catch (e) {}
     }
 

@@ -6,7 +6,9 @@ import { useTablesStore } from '../stores/tables'
 import { useOrdersStore } from '../stores/orders'
 import { useCategoriesStore } from '../stores/categories'
 import { useProductsStore } from '../stores/products'
-import { formatMoney, type Product, type Order } from '../db'
+import { formatMoney } from '../db'
+import type { Product } from '../stores/products'
+import type { Order, OrderItem } from '../stores/orders'
 import {
   ArrowLeft, Plus, Minus, X, Search, MessageSquare,
   Banknote, CreditCard, Trash2, ChevronDown
@@ -60,9 +62,9 @@ const currentOrder = computed<Order | null>(() => {
   return ordersStore.byId(currentOrderId.value) ?? null
 })
 
-const closedOrders = computed<Order[]>(() => {
-  if (!selectedTable.value) return []
-  return ordersStore.closedOrdersForTable(selectedTable.value.id)
+const closedOrders = computed(() => {
+  if (!selectedTable.value) return [] as Order[]
+  return ordersStore.closedOrdersForTable(selectedTable.value.id) as unknown as Order[]
 })
 
 const grandTotal = computed(() => {
@@ -175,7 +177,7 @@ async function startNewOrder() {
   }
   const order = await ordersStore.ensureOpenOrder(
     selectedTable.value.id,
-    auth.currentStaff?.id
+    auth.currentStaff?.id ?? null
   )
   currentOrderId.value = order.id
 }
@@ -197,12 +199,14 @@ async function addProduct(product: Product) {
   if (!currentOrderId.value) {
     const order = await ordersStore.ensureOpenOrder(
       selectedTable.value.id,
-      auth.currentStaff?.id
+      auth.currentStaff?.id ??null
     )
     currentOrderId.value = order.id
   }
 
-  await ordersStore.addProduct(currentOrderId.value, product)
+  // Ensure categoryId matches orders.Product type (string) — convert null to empty string
+  const productForOrder = { ...product, categoryId: (product as any).categoryId ?? '' }
+  await ordersStore.addProduct(currentOrderId.value, productForOrder)
 }
 
 // Toast alert per stok
@@ -222,7 +226,7 @@ async function increase(index: number) {
   const item = currentOrder.value.items[index]
 
   // Kontrollo stokun para se me increase
-  const product = productsStore.byId(item.productId) as any
+ const product = productsStore.byId.get(item.productId) as any
   if (product?.trackStock && product?.autoDeductOnSale) {
     // Sa aktualisht ne krejt porosite e hapura
     const totalInOrders = productQuantityInOrder.value.get(item.productId) ?? 0
@@ -481,7 +485,7 @@ function catName(id: string): string {
 
         <div class="order-items" v-if="currentOrder && currentOrder.items.length > 0">
           <div v-for="(item, index) in currentOrder.items" :key="index" class="order-item">
-            <div class="oi-color" :style="{ background: catColor(item.categoryId) }"></div>
+            <div class="oi-color" :style="{ background: catColor(item.categoryId ?? '') }"></div>
 
             <div class="oi-info">
               <div class="oi-name-row">
@@ -586,7 +590,7 @@ function catName(id: string): string {
               'product--blocked': isProductBlocked(product),
               'product--low': isProductLowStock(product)
             }" :disabled="isProductBlocked(product)" @click="addProduct(product)">
-              <span class="product-color" :style="{ background: catColor(product.categoryId) }"></span>
+              <span class="product-color" :style="{ background: catColor(product.categoryId ?? '') }"></span>
               <div class="product-name">{{ product.name }}</div>
               <div class="product-price mono">{{ formatMoney(product.price) }}</div>
 

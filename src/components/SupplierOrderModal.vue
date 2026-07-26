@@ -52,7 +52,7 @@ watch(() => props.open, async (isOpen) => {
 
   // Sugjero produkte me stok te ulet automatikisht
   const lowStock = productsStore.products
-    .filter(p => p.trackStock && p.stockQuantity <= p.lowStockThreshold)
+    .filter(p => p.trackStock && p.stockQuantity <= (p.lowStockThreshold ?? 0))
     .slice(0, 5)
 
   if (lowStock.length > 0) {
@@ -70,7 +70,7 @@ watch(() => props.open, async (isOpen) => {
 
 function suggestedQuantity(p: Product): string {
   // Sugjero sasi qe mbush stokun deri ne 3× threshold
-  const target = Math.max(p.lowStockThreshold * 3, 20)
+  const target = Math.max((p.lowStockThreshold ?? 0) * 3, 20)
   const needed = Math.max(0, target - p.stockQuantity)
   if (p.stockUnit === 'KG') return needed.toFixed(2)
   return String(Math.ceil(needed))
@@ -83,12 +83,12 @@ const stockProducts = computed(() =>
 
 const lowStockProducts = computed(() =>
   productsStore.products.filter(p =>
-    p.trackStock && p.stockQuantity <= p.lowStockThreshold
+    p.trackStock && p.stockQuantity <= (p.lowStockThreshold ?? 0)
   )
 )
 
 function productById(id: string): Product | undefined {
-  return productsStore.byId(id)
+  return productsStore.byId.get(id)
 }
 
 function unitFor(id: string): string {
@@ -106,7 +106,7 @@ function currentStockFor(id: string): string {
 
 function isLowStock(id: string): boolean {
   const p = productById(id)
-  return !!p && p.stockQuantity <= p.lowStockThreshold
+  return !!p && p.stockQuantity <=(p.lowStockThreshold ?? 0)
 }
 
 function addRow() {
@@ -268,7 +268,7 @@ function closeModal() {
                   <option value="">Zgjidh produktin...</option>
                   <option v-for="p in stockProducts" :key="p.id" :value="p.id">
                     {{ p.name }}
-                    <template v-if="p.stockQuantity <= p.lowStockThreshold">⚠</template>
+                    <template v-if="p.stockQuantity <= (p.lowStockThreshold ?? 0)">⚠</template>
                   </option>
                 </select>
 

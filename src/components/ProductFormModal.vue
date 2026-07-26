@@ -40,7 +40,7 @@ watch(() => props.open, (isOpen) => {
     form.value = {
       name: props.prod.name,
       priceText: (props.prod.price / 100).toFixed(2),
-      categoryId: props.prod.categoryId,
+      categoryId: props.prod.categoryId ?? '',
       trackStock: p.trackStock ?? false,
       autoDeductOnSale: p.autoDeductOnSale ?? false,
       stockUnit: (p.stockUnit ?? 'PIECE') as 'PIECE' | 'KG',
@@ -104,7 +104,7 @@ async function save() {
     let result: Product
     if (props.prod) {
       await productsStore.update(props.prod.id, payload)
-      result = productsStore.byId(props.prod.id)!
+      result = productsStore.byId.get(props.prod.id)!
     } else {
       payload.stockQuantity = stockQuantity
       result = await productsStore.create(payload)

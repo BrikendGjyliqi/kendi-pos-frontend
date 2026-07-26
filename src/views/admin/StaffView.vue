@@ -1,139 +1,105 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { api } from '../../api/client'
-import { User, Shield, Printer } from 'lucide-vue-next'
+import { useAuthStore } from '../../stores/auth'
+import { Plus, Pencil, Trash2, Shield, User, X } from 'lucide-vue-next'
 
 type Staff = {
   id: string
   name: string
-  role: string
+  pin: string
+  role: 'admin' | 'cashier'
 }
 
-type OrderItem = {
-  productId: string
-  name: string
-  price: number
-  quantity: number
+const auth = useAuthStore()
+const staff = ref<Staff[]>([])
+const loaded = ref(false)
+
+const modal = ref<{ open: boolean; staff: Staff | null }>({ open: false, staff: null })
+const form = ref({ name: '', pin: '', role: 'cashier' as 'admin' | 'cashier' })
+const formError = ref<string | null>(null)
+
+const sortedStaff = computed(() =>
+  [...staff.value].sort((a, b) => {
+    if (a.role === b.role) return a.name.localeCompare(b.name)
+    return a.role === 'admin' ? -1 : 1
+  })
+)
+
+async function loadStaff() {
+  try {
+    staff.value = await api.get<Staff[]>('/staff')
+  } catch (e) {
+    console.error('Failed to load staff:', e)
+  } finally {
+    loaded.value = true
+  }
 }
 
-type Order = {
-  id: string
-  tableId: string
-  status: string
-  total: number
-  paymentMethod?: string
-  paidAt?: number | null
-  closedAt?: number | null
-  staffId?: string
-  tipAmount?: number | null
-  tipPercent?: number | null
-  items: OrderItem[]
+onMounted(loadStaff)
+
+function openNew() {
+  form.value = { name: '', pin: '', role: 'cashier' }
+  formError.value = null
+  modal.value = { open: true, staff: null }
 }
 
-type ProductStats = { name: string; qty: number; revenue: number }
-
-type StaffReport = {
-  date: string
-  staffId: string
-  totalRevenue: number
-  cashTotal: number
-  cardTotal: number
-  tipTotal: number
-  orderCount: number
-  products: ProductStats[]
-  orders: Order[]
+function openEdit(s: Staff) {
+  form.value = { name: s.name, pin: s.pin, role: s.role }
+  formError.value = null
+  modal.value = { open: true, staff: s }
 }
 
-function todayLocal(): string {
-  const d = new Date()
-  const year = d.getFullYear()
-  const month = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
+function closeModal() {
+  modal.value = { open: false, staff: null }
 }
 
-const staffList = ref<Staff[]>([])
-const selectedStaffId = ref<string | null>(null)
-const selectedDate = ref(todayLocal())
-const report = ref<StaffReport | null>(null)
-
-function formatMoney(cents: number): string {
-  return '€ ' + (cents / 100).toFixed(2)
-}
-
-async function loadReport() {
-  if (!selectedStaffId.value) {
-    report.value = null
+async function save() {
+  formError.value = null
+  const name = form.value.name.trim()
+  if (!name) {
+    formError.value = 'Emri është i nevojshëm'
     return
   }
-  report.value = await api.get<StaffReport>(
-    `/reports/staff?staffId=${selectedStaffId.value}&date=${selectedDate.value}`
-  )
-}
-
-onMounted(async () => {
-  staffList.value = await api.get<Staff[]>('/staff')
-  if (staffList.value.length > 0) {
-    selectedStaffId.value = staffList.value[0].id
-    await loadReport()
+  if (!/^\d{4}$/.test(form.value.pin)) {
+    formError.value = 'PIN duhet të jetë 4 shifra'
+    return
   }
-})
 
-watch([selectedStaffId, selectedDate], loadReport)
-
-const selectedStaff = computed(() =>
-  staffList.value.find(s => s.id === selectedStaffId.value) ?? null
-)
-
-const staffOrders = computed(() => report.value?.orders ?? [])
-const totalRevenue = computed(() => report.value?.totalRevenue ?? 0)
-const cashTotal = computed(() => report.value?.cashTotal ?? 0)
-const cardTotal = computed(() => report.value?.cardTotal ?? 0)
-const tipTotal = computed(() => report.value?.tipTotal ?? 0)
-const productSales = computed(() => report.value?.products ?? [])
-
-const ordersWithTip = computed(() =>
-  staffOrders.value.filter(o => (o.tipAmount ?? 0) > 0).length
-)
-
-function formatDate(dateStr: string): string {
-  return new Date(dateStr + 'T12:00:00').toLocaleDateString('sq-AL', {
-    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
-  })
-}
-
-function formatTime(ts?: number | null): string {
-  if (!ts) return '—'
-  return new Date(ts).toLocaleTimeString('sq-AL', { hour: '2-digit', minute: '2-digit' })
-}
-
-function prevDay() {
-  const d = new Date(selectedDate.value + 'T12:00:00')
-  d.setDate(d.getDate() - 1)
-  const year = d.getFullYear()
-  const month = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  selectedDate.value = `${year}-${month}-${day}`
-}
-
-function nextDay() {
-  const d = new Date(selectedDate.value + 'T12:00:00')
-  d.setDate(d.getDate() + 1)
-  const year = d.getFullYear()
-  const month = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  const nextStr = `${year}-${month}-${day}`
-  if (nextStr <= todayLocal()) {
-    selectedDate.value = nextStr
+  try {
+    if (modal.value.staff) {
+      const updated = await api.put<Staff>(`/staff/${modal.value.staff.id}`, {
+        name,
+        pin: form.value.pin,
+        role: form.value.role
+      })
+      staff.value = staff.value.map(s => s.id === updated.id ? updated : s)
+    } else {
+      const created = await api.post<Staff>('/staff', {
+        name,
+        pin: form.value.pin,
+        role: form.value.role
+      })
+      staff.value.push(created)
+    }
+    closeModal()
+  } catch (e) {
+    formError.value = (e as Error).message
   }
 }
 
-const isToday = computed(() =>
-  selectedDate.value === todayLocal()
-)
-
-function printReport() {
-  window.print()
+async function remove(s: Staff) {
+  if (s.id === auth.currentStaff?.id) {
+    alert('Nuk mund të fshini veten')
+    return
+  }
+  if (!confirm(`Fshi përdoruesin "${s.name}"?`)) return
+  try {
+    await api.delete(`/staff/${s.id}`)
+    staff.value = staff.value.filter(x => x.id !== s.id)
+  } catch (e) {
+    alert((e as Error).message)
+  }
 }
 </script>
 
@@ -141,142 +107,97 @@ function printReport() {
   <div class="page">
     <header class="page-head">
       <div>
-        <p class="eyebrow">Analitikë</p>
-        <h1>Raporti i personelit</h1>
+        <p class="eyebrow">Menaxhim</p>
+        <h1>Personeli</h1>
       </div>
-      <button class="k-btn k-btn--ghost no-print" @click="printReport">
-        <Printer :size="16" />
-        Printo raportin
+      <button class="k-btn k-btn--primary" @click="openNew">
+        <Plus :size="16" />
+        Shto përdorues
       </button>
     </header>
 
-    <!-- Controls -->
-    <div class="controls no-print">
-      <!-- Staff selector -->
-      <div class="staff-selector">
-        <button v-for="staff in staffList" :key="staff.id"
-          :class="['staff-btn', selectedStaffId === staff.id && 'staff-btn--active']"
-          @click="selectedStaffId = staff.id">
-          <component :is="staff.role === 'admin' ? Shield : User" :size="14" />
-          {{ staff.name }}
-          <span class="staff-role">{{ staff.role === 'admin' ? 'Admin' : 'Banakier' }}</span>
-        </button>
-      </div>
-
-      <!-- Date nav -->
-      <div class="date-nav">
-        <button class="nav-btn" @click="prevDay">←</button>
-        <input type="date" v-model="selectedDate" class="date-input" />
-        <button class="nav-btn" @click="nextDay" :disabled="isToday">→</button>
-      </div>
-    </div>
-
-    <!-- Print header -->
-    <div class="print-header print-only">
-      <h2>Raport Personeli — {{ selectedStaff?.name }}</h2>
-      <p>{{ formatDate(selectedDate) }}</p>
-    </div>
-
-    <!-- Stats -->
-    <div class="stats-grid" v-if="selectedStaff">
-      <div class="stat-card stat-card--main">
-        <div class="stat-staff-info">
-          <component :is="selectedStaff.role === 'admin' ? Shield : User" :size="22" />
-          <div>
-            <p class="stat-staff-name">{{ selectedStaff.name }}</p>
-            <p class="stat-staff-role">{{ selectedStaff.role === 'admin' ? 'Admin' : 'Banakier' }}</p>
+    <div class="staff-card k-card">
+      <div v-if="sortedStaff.length > 0" class="staff-list">
+        <div v-for="s in sortedStaff" :key="s.id" class="staff-row">
+          <div class="staff-icon" :class="{ admin: s.role === 'admin' }">
+            <Shield v-if="s.role === 'admin'" :size="16" />
+            <User v-else :size="16" />
           </div>
-        </div>
-        <p class="stat-label">Total shitje</p>
-        <p class="stat-val money">{{ formatMoney(totalRevenue) }}</p>
-        <p class="stat-sub">{{ staffOrders.length }} porosi</p>
-      </div>
-
-      <div class="stat-card">
-        <p class="stat-label">Kesh</p>
-        <p class="stat-val">{{ formatMoney(cashTotal) }}</p>
-        <p class="stat-sub">{{ staffOrders.filter(o => o.paymentMethod === 'cash').length }} porosi</p>
-      </div>
-
-      <div class="stat-card">
-        <p class="stat-label">Kartë</p>
-        <p class="stat-val">{{ formatMoney(cardTotal) }}</p>
-        <p class="stat-sub">{{ staffOrders.filter(o => o.paymentMethod === 'card').length }} porosi</p>
-      </div>
-
-      <div class="stat-card stat-card--tip">
-        <p class="stat-label">Bakshishi</p>
-        <p class="stat-val tip">{{ formatMoney(tipTotal) }}</p>
-        <p class="stat-sub">{{ ordersWithTip }} porosi me bakshish</p>
-      </div>
-
-      <div class="stat-card">
-        <p class="stat-label">Mesatarja / porosi</p>
-        <p class="stat-val">{{ staffOrders.length ? formatMoney(Math.round(totalRevenue / staffOrders.length)) : '€ 0.00' }}</p>
-      </div>
-    </div>
-
-    <div v-if="staffOrders.length === 0 && selectedStaff" class="k-empty">
-      <p>{{ selectedStaff.name }} nuk ka asnjë shitje për {{ formatDate(selectedDate) }}</p>
-    </div>
-
-    <div v-if="staffOrders.length > 0" class="sections">
-      <!-- Top produktet -->
-      <div class="section k-card no-print">
-        <h2 class="section-title">Produktet e shitura</h2>
-        <div class="products-list">
-          <div v-for="(p, i) in productSales" :key="p.name" class="product-row">
-            <span class="product-rank">{{ i + 1 }}</span>
-            <span class="product-name">{{ p.name }}</span>
-            <span class="product-qty mono">× {{ p.qty }}</span>
-            <div class="product-bar-wrap">
-              <div class="product-bar"
-                :style="{ width: productSales.length ? (p.revenue / productSales[0].revenue * 100) + '%' : '0%' }">
-              </div>
+          <div class="staff-info">
+            <div class="staff-name">
+              {{ s.name }}
+              <span v-if="s.id === auth.currentStaff?.id" class="staff-you">(ti)</span>
             </div>
-            <span class="product-revenue mono">{{ formatMoney(p.revenue) }}</span>
+            <div class="staff-role">
+              {{ s.role === 'admin' ? 'Admin' : 'Banakier' }}
+              <span class="staff-pin mono">PIN: {{ s.pin }}</span>
+            </div>
+          </div>
+          <div class="staff-actions">
+            <button class="row-btn" @click="openEdit(s)" title="Ndrysho">
+              <Pencil :size="14" />
+            </button>
+            <button class="row-btn row-btn--danger" @click="remove(s)" title="Fshij">
+              <Trash2 :size="14" />
+            </button>
           </div>
         </div>
       </div>
 
-      <!-- Historiku i porosive -->
-      <div class="section k-card no-print">
-        <h2 class="section-title">Porositë e {{ selectedStaff?.name }}</h2>
-        <table class="orders-table">
-          <thead>
-            <tr>
-              <th>Ora</th>
-              <th>Tavolina</th>
-              <th>Artikuj</th>
-              <th>Pagesa</th>
-              <th>Bakshish</th>
-              <th>Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="order in staffOrders" :key="order.id">
-              <td class="mono">{{ formatTime(order.paidAt ?? order.closedAt) }}</td>
-              <td>{{ order.tableId }}</td>
-              <td>{{ order.items.reduce((s, i) => s + i.quantity, 0) }}</td>
-              <td>{{ order.paymentMethod === 'cash' ? 'Kesh' : 'Kartë' }}</td>
-              <td class="mono tip">
-                <span v-if="(order.tipAmount ?? 0) > 0">
-                  {{ formatMoney(order.tipAmount!) }}
-                  <span class="tip-pct" v-if="order.tipPercent">({{ order.tipPercent }}%)</span>
-                </span>
-                <span v-else class="dim">—</span>
-              </td>
-              <td class="mono money">{{ formatMoney(order.total) }}</td>
-            </tr>
-          </tbody>
-          <tfoot>
-            <tr>
-              <td colspan="4" style="font-weight:700; padding: 12px 16px;">TOTALI</td>
-              <td class="mono tip" style="font-weight:700; padding: 12px 16px;">{{ formatMoney(tipTotal) }}</td>
-              <td class="mono money" style="font-weight:700; padding: 12px 16px;">{{ formatMoney(totalRevenue) }}</td>
-            </tr>
-          </tfoot>
-        </table>
+      <div v-else-if="loaded" class="k-empty">
+        <p>Asnjë përdorues</p>
+      </div>
+    </div>
+
+    <!-- Modal -->
+    <div v-if="modal.open" class="modal-bg" @click.self="closeModal">
+      <div class="modal">
+        <header class="modal-head">
+          <h2>{{ modal.staff ? 'Ndrysho përdorues' : 'Shto përdorues' }}</h2>
+          <button class="modal-close" @click="closeModal">
+            <X :size="20" />
+          </button>
+        </header>
+
+        <div class="modal-body">
+          <div class="field">
+            <label>Emri</label>
+            <input v-model="form.name" type="text" class="k-input" placeholder="Emri i plotë" />
+          </div>
+
+          <div class="field">
+            <label>PIN (4 shifra)</label>
+            <input v-model="form.pin" type="text" maxlength="4" inputmode="numeric"
+              class="k-input" placeholder="0000" />
+          </div>
+
+          <div class="field">
+            <label>Roli</label>
+            <div class="role-selector">
+              <button
+                :class="['role-btn', form.role === 'admin' && 'role-btn--active']"
+                @click="form.role = 'admin'">
+                <Shield :size="14" />
+                Admin
+              </button>
+              <button
+                :class="['role-btn', form.role === 'cashier' && 'role-btn--active']"
+                @click="form.role = 'cashier'">
+                <User :size="14" />
+                Banakier
+              </button>
+            </div>
+          </div>
+
+          <div v-if="formError" class="form-error">{{ formError }}</div>
+        </div>
+
+        <footer class="modal-foot">
+          <button class="k-btn k-btn--ghost" @click="closeModal">Anulo</button>
+          <button class="k-btn k-btn--primary" @click="save">
+            {{ modal.staff ? 'Ruaj' : 'Shto' }}
+          </button>
+        </footer>
       </div>
     </div>
   </div>
@@ -284,234 +205,236 @@ function printReport() {
 
 <style scoped>
 .page {
+  padding: 24px 28px;
   display: flex;
   flex-direction: column;
-  padding: 24px 28px;
-  gap: 18px;
-  overflow-y: auto;
-  height: 100%;
+  gap: 20px;
 }
 
 .page-head {
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
-  flex-shrink: 0;
 }
-.page-head .eyebrow { margin-bottom: 4px; }
-.page-head h1 { font-size: 30px; font-weight: 700; letter-spacing: -0.02em; }
 
-/* Controls */
-.controls {
+.page-head h1 {
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.staff-list {
   display: flex;
-  gap: 16px;
+  flex-direction: column;
+}
+
+.staff-row {
+  display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  flex-shrink: 0;
+  gap: 14px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
 }
 
-/* Staff selector */
-.staff-selector { display: flex; gap: 8px; flex-wrap: wrap; }
-
-.staff-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  color: var(--text-2);
-  font-size: 13px;
-  font-weight: 500;
-  transition: all var(--duration) var(--ease);
-}
-.staff-btn:hover { background: var(--surface-2); color: var(--text); }
-.staff-btn--active {
-  background: var(--brand-soft);
-  border-color: var(--brand-line);
-  color: var(--text);
+.staff-row:last-child {
+  border-bottom: none;
 }
 
-.staff-role {
-  font-size: 10px;
-  font-family: var(--font-mono);
-  color: var(--text-3);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  padding: 2px 6px;
+.staff-row:hover {
   background: var(--surface-2);
-  border-radius: var(--radius-full);
 }
 
-/* Date nav */
-.date-nav {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-left: auto;
-}
-
-.nav-btn {
+.staff-icon {
   width: 36px;
   height: 36px;
-  background: var(--surface);
-  border: 1px solid var(--border);
   border-radius: var(--radius);
-  color: var(--text);
-  font-size: 14px;
-  transition: all var(--duration) var(--ease);
-}
-.nav-btn:hover:not(:disabled) { background: var(--surface-2); }
-.nav-btn:disabled { opacity: 0.3; }
-
-.date-input {
-  height: 36px;
-  padding: 0 12px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  color: var(--text);
-  font-size: 13px;
-  font-family: var(--font-mono);
-  outline: none;
-}
-
-/* Stats */
-.stats-grid {
-  display: grid;
-  grid-template-columns: 1.6fr 1fr 1fr 1fr 1fr;
-  gap: 14px;
+  background: var(--surface-2);
+  color: var(--text-2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
 }
 
-.stat-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 20px;
-}
-.stat-card--main { background: var(--surface-2); border-color: var(--brand-line); }
-.stat-card--tip { border-color: var(--warn-line, var(--border)); background: var(--warn-soft, var(--surface)); }
-
-.stat-staff-info {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--border);
+.staff-icon.admin {
+  background: var(--brand-soft);
   color: var(--brand);
 }
 
-.stat-staff-name { font-size: 16px; font-weight: 700; color: var(--text); }
-.stat-staff-role { font-size: 11px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 2px; }
-
-.stat-label { font-size: 12px; color: var(--text-3); margin-bottom: 8px; }
-.stat-val { font-size: 26px; font-weight: 700; color: var(--text); letter-spacing: -0.01em; }
-.stat-val.money { color: var(--money); font-variant-numeric: tabular-nums; }
-.stat-val.tip { color: var(--warn, #E5B54B); font-variant-numeric: tabular-nums; }
-.stat-sub { font-size: 12px; color: var(--text-3); margin-top: 6px; }
-
-/* Sections */
-.sections { display: flex; flex-direction: column; gap: 16px; }
-.section { padding: 20px 22px; }
-.section-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-2);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  margin-bottom: 16px;
+.staff-info {
+  flex: 1;
 }
 
-/* Products */
-.products-list { display: flex; flex-direction: column; gap: 8px; }
-.product-row {
-  display: grid;
-  grid-template-columns: 24px 1fr auto 100px auto;
-  align-items: center;
-  gap: 12px;
+.staff-name {
   font-size: 14px;
-}
-.product-rank { color: var(--text-3); font-family: var(--font-mono); font-size: 12px; }
-.product-name { color: var(--text); font-weight: 500; }
-.product-qty { color: var(--text-3); }
-.product-bar-wrap { height: 6px; background: var(--surface-2); border-radius: 99px; overflow: hidden; }
-.product-bar { height: 100%; background: var(--brand); border-radius: 99px; min-width: 4px; }
-.product-revenue { color: var(--money); font-weight: 600; }
-
-/* Table */
-.orders-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-.orders-table th {
-  text-align: left; padding: 10px 16px;
-  font-size: 11px; font-weight: 600;
-  text-transform: uppercase; letter-spacing: 0.08em;
-  color: var(--text-3); border-bottom: 1px solid var(--border);
-}
-.orders-table td { padding: 12px 16px; color: var(--text-2); border-bottom: 1px solid var(--border); }
-.orders-table tfoot td { border-bottom: none; border-top: 2px solid var(--border-strong); color: var(--text); }
-.orders-table tbody tr:hover td { background: var(--surface-2); }
-.money { color: var(--money); font-variant-numeric: tabular-nums; }
-.tip { color: var(--warn, #E5B54B); font-variant-numeric: tabular-nums; }
-.tip-pct { color: var(--text-3); font-size: 11px; margin-left: 4px; }
-.dim { color: var(--text-3); }
-
-.print-only { display: none; }
-.print-header h2 { font-size: 20px; font-weight: 700; }
-
-@media (max-width: 1100px) {
-  .stats-grid { grid-template-columns: 1fr 1fr 1fr; }
+  font-weight: 600;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
-@media (max-width: 900px) {
-  .stats-grid { grid-template-columns: 1fr 1fr; }
-  .product-bar-wrap { display: none; }
-  .product-row { grid-template-columns: 24px 1fr auto auto; }
+.staff-you {
+  font-size: 11px;
+  color: var(--text-3);
+  font-weight: 400;
 }
-</style>
 
-<style>
-/* Global print styles — ndikojne edhe ne AdminLayout dhe krejt page-in */
-@media print {
-  /* Fshi sidebar-in ne AdminLayout */
-  .admin > aside,
-  .admin .sidebar,
-  aside {
-    display: none !important;
-  }
+.staff-role {
+  font-size: 12px;
+  color: var(--text-3);
+  margin-top: 3px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
 
-  /* Fshi krejt elementet me klase no-print (edhe jashte scope) */
-  .no-print,
-  .no-print * {
-    display: none !important;
-  }
+.staff-pin {
+  font-size: 11px;
+  color: var(--text-3);
+  background: var(--surface-2);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
 
-  /* Layout-i i AdminLayout: main content fill full width */
-  .admin, .admin-layout {
-    display: block !important;
-  }
+.staff-actions {
+  display: flex;
+  gap: 6px;
+}
 
-  .admin > main, .admin .main {
-    padding: 0 !important;
-    max-width: 100% !important;
-    overflow: visible !important;
-  }
+.row-btn {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  color: var(--text-2);
+  transition: all var(--duration) var(--ease);
+}
 
-  /* Page cleanup */
-  .page {
-    padding: 20px !important;
-    overflow: visible !important;
-    height: auto !important;
-  }
+.row-btn:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
 
-  /* Colors */
-  body {
-    background: white !important;
-    color: black !important;
-  }
+.row-btn--danger:hover {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
 
-  /* Print header display */
-  .print-only { display: block !important; }
+/* Modal */
+.modal-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: var(--overlay);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.modal {
+  width: 100%;
+  max-width: 440px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+}
+
+.modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--border);
+}
+
+.modal-head h2 {
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.modal-close {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  color: var(--text-2);
+}
+
+.modal-close:hover {
+  background: var(--surface-2);
+}
+
+.modal-body {
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-2);
+}
+
+.role-selector {
+  display: flex;
+  gap: 8px;
+}
+
+.role-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-2);
+  font-size: 13px;
+  transition: all var(--duration) var(--ease);
+}
+
+.role-btn:hover {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.role-btn--active {
+  background: var(--brand-soft);
+  border-color: var(--brand-line);
+  color: var(--brand);
+}
+
+.form-error {
+  font-size: 13px;
+  color: var(--danger);
+  padding: 10px 14px;
+  background: var(--danger-soft);
+  border-radius: 8px;
+}
+
+.modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 22px;
+  border-top: 1px solid var(--border);
 }
 </style>

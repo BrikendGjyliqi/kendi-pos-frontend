@@ -117,7 +117,7 @@ const stockProducts = computed(() =>
 )
 
 function productById(id: string): Product | undefined {
-  return productsStore.byId(id)
+  return productsStore.byId.get(id)
 }
 
 function unitFor(id: string): string {

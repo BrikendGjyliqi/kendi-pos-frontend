@@ -2,7 +2,8 @@
 import { ref, computed, onMounted } from 'vue'
 import { useCategoriesStore } from '../../stores/categories'
 import { useProductsStore } from '../../stores/products'
-import { formatMoney, type Category, type Product } from '../../db'
+import { formatMoney, type Category } from '../../db'
+import type { Product } from '../../stores/products'
 import { CATEGORY_COLORS } from '../../db/seed'
 import { Plus, Pencil, Trash2, X, Search, Package, AlertTriangle } from 'lucide-vue-next'
 
@@ -50,7 +51,7 @@ const filteredProducts = computed(() => {
 const categoryStats = computed(() => {
   const stats = new Map<string, number>()
   for (const p of productsStore.products) {
-    stats.set(p.categoryId, (stats.get(p.categoryId) ?? 0) + 1)
+    if (p.categoryId) stats.set(p.categoryId, (stats.get(p.categoryId) ?? 0) + 1)
   }
   return stats
 })
@@ -136,7 +137,7 @@ function openEditProduct(prod: Product) {
   prodForm.value = {
     name: prod.name,
     priceText: (prod.price / 100).toFixed(2),
-    categoryId: prod.categoryId,
+    categoryId: prod.categoryId ??  '',
     trackStock: p.trackStock ?? false,
     autoDeductOnSale: p.autoDeductOnSale ?? false,
     stockUnit: (p.stockUnit ?? 'PIECE') as 'PIECE' | 'KG',
