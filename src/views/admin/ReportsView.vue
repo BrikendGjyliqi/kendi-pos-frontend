@@ -3,6 +3,10 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { api } from '../../api/client'
 import { useSettingsStore } from '../../stores/settings'
 import { Printer, FileText, X, Send, Calendar } from 'lucide-vue-next'
+import jsPDF from 'jspdf'
+import autoTable from 'jspdf-autotable'
+import { save } from '@tauri-apps/plugin-dialog'
+import { writeFile } from '@tauri-apps/plugin-fs'
 
 type OrderItem = {
   productId: string
@@ -108,14 +112,9 @@ const isToday = computed(() =>
   selectedDate.value === todayLocal()
 )
 
-function printReport() {
+// ─── PDF: Z-Report ditor ───
+async function printReport() {
   if (!report.value) return
-
-  const w = window.open('', '_blank', 'width=900,height=1100')
-  if (!w) {
-    alert('Ju lutem lejoni pop-up-et për të printuar.')
-    return
-  }
 
   const cashOrders = todayOrders.value.filter(o => o.paymentMethod === 'cash').length
   const cardOrders = todayOrders.value.filter(o => o.paymentMethod === 'card').length
@@ -123,127 +122,114 @@ function printReport() {
     ? Math.round(totalRevenue.value / todayOrders.value.length)
     : 0
 
-  const closeScript = String.fromCharCode(60) + '/script' + String.fromCharCode(62)
-  const openScript = String.fromCharCode(60) + 'script' + String.fromCharCode(62)
+  const doc = new jsPDF()
 
-  const html = `<!DOCTYPE html>
-<html>
-<head>
-  <title>Z-Report ${selectedDate.value}</title>
-  <style>
-    * { box-sizing: border-box; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
-      padding: 40px 50px;
-      color: #6B7280;
-      background: white;
-      margin: 0;
-    }
-    .eyebrow {
-      font-size: 11px;
-      font-family: monospace;
-      text-transform: uppercase;
-      letter-spacing: 0.12em;
-      color: #9CA3AF;
-      margin-bottom: 6px;
-    }
-    h1 {
-      font-size: 32px;
-      font-weight: 700;
-      letter-spacing: -0.02em;
-      margin: 0 0 32px;
-      color: #6B7280;
-    }
-    .subtitle {
-      font-size: 20px;
-      font-weight: 700;
-      color: #374151;
-      margin-bottom: 4px;
-    }
-    .date {
-      font-size: 14px;
-      color: #9CA3AF;
-      margin-bottom: 32px;
-    }
-    .stat-card {
-      border: 1px solid #E5E7EB;
-      border-radius: 12px;
-      padding: 26px 30px;
-      margin-bottom: 20px;
-      background: white;
-    }
-    .stat-card.main {
-      border-color: #6EE7B7;
-      background: #F0FDF4;
-    }
-    .stat-label {
-      font-size: 13px;
-      color: #9CA3AF;
-      margin-bottom: 12px;
-    }
-    .stat-val {
-      font-size: 34px;
-      font-weight: 700;
-      color: #6B7280;
-      font-variant-numeric: tabular-nums;
-      letter-spacing: -0.01em;
-    }
-    .stat-val.money {
-      color: #059669;
-    }
-    .stat-sub {
-      font-size: 13px;
-      color: #9CA3AF;
-      margin-top: 10px;
-    }
-    @media print {
-      body { padding: 20px 30px; }
-    }
-  </style>
-</head>
-<body>
-  <div class="eyebrow">ANALITIKË</div>
-  <h1>Raportet</h1>
+  // Header
+  doc.setFontSize(10)
+  doc.setTextColor(150)
+  doc.text('ANALITIKE', 20, 20)
 
-  <div class="subtitle">Z-Report — Kendi POS</div>
-  <div class="date">${formatDate(selectedDate.value)}</div>
+  doc.setFontSize(24)
+  doc.setTextColor(50)
+  doc.text('Raportet', 20, 32)
 
-  <div class="stat-card main">
-    <div class="stat-label">Total shitje</div>
-    <div class="stat-val money">${formatMoney(totalRevenue.value)}</div>
-    <div class="stat-sub">${todayOrders.value.length} porosi</div>
-  </div>
+  doc.setFontSize(14)
+  doc.setTextColor(80)
+  doc.text('Z-Report - Kendi POS', 20, 45)
 
-  <div class="stat-card">
-    <div class="stat-label">Kesh</div>
-    <div class="stat-val">${formatMoney(cashTotal.value)}</div>
-    <div class="stat-sub">${cashOrders} porosi</div>
-  </div>
+  doc.setFontSize(11)
+  doc.setTextColor(120)
+  doc.text(formatDate(selectedDate.value), 20, 53)
 
-  <div class="stat-card">
-    <div class="stat-label">Kartë</div>
-    <div class="stat-val">${formatMoney(cardTotal.value)}</div>
-    <div class="stat-sub">${cardOrders} porosi</div>
-  </div>
+  // Total shitje
+  doc.setDrawColor(110, 231, 183)
+  doc.setFillColor(240, 253, 244)
+  doc.roundedRect(20, 62, 170, 28, 3, 3, 'FD')
+  doc.setFontSize(10)
+  doc.setTextColor(120)
+  doc.text('Total shitje', 25, 71)
+  doc.setFontSize(20)
+  doc.setTextColor(5, 150, 105)
+  doc.text(formatMoney(totalRevenue.value), 25, 82)
+  doc.setFontSize(10)
+  doc.setTextColor(120)
+  doc.text(`${todayOrders.value.length} porosi`, 25, 88)
 
-  <div class="stat-card">
-    <div class="stat-label">Mesatarja / porosi</div>
-    <div class="stat-val">${formatMoney(avgOrder)}</div>
-  </div>
+  // Kesh
+  doc.setDrawColor(220)
+  doc.setFillColor(255, 255, 255)
+  doc.roundedRect(20, 95, 82, 28, 3, 3, 'FD')
+  doc.setFontSize(10)
+  doc.setTextColor(120)
+  doc.text('Kesh', 25, 104)
+  doc.setFontSize(16)
+  doc.setTextColor(50)
+  doc.text(formatMoney(cashTotal.value), 25, 115)
+  doc.setFontSize(9)
+  doc.setTextColor(120)
+  doc.text(`${cashOrders} porosi`, 25, 121)
 
-  ${openScript}
-    window.onload = function() {
-      setTimeout(function() {
-        window.print();
-        setTimeout(function() { window.close(); }, 500);
-      }, 200);
-    };
-  ${closeScript}
-</body>
-</html>`
+  // Karte
+  doc.roundedRect(108, 95, 82, 28, 3, 3, 'FD')
+  doc.setFontSize(10)
+  doc.setTextColor(120)
+  doc.text('Karte', 113, 104)
+  doc.setFontSize(16)
+  doc.setTextColor(50)
+  doc.text(formatMoney(cardTotal.value), 113, 115)
+  doc.setFontSize(9)
+  doc.setTextColor(120)
+  doc.text(`${cardOrders} porosi`, 113, 121)
 
-  w.document.write(html)
-  w.document.close()
+  // Mesatarja
+  doc.roundedRect(20, 128, 170, 24, 3, 3, 'FD')
+  doc.setFontSize(10)
+  doc.setTextColor(120)
+  doc.text('Mesatarja / porosi', 25, 137)
+  doc.setFontSize(16)
+  doc.setTextColor(50)
+  doc.text(formatMoney(avgOrder), 25, 147)
+
+  // Produktet me te shitura
+  if (productSales.value.length > 0) {
+    doc.setFontSize(11)
+    doc.setTextColor(80)
+    doc.text('PRODUKTET ME TE SHITURA', 20, 165)
+
+    autoTable(doc, {
+      startY: 170,
+      head: [['#', 'Produkti', 'Sasia', 'Totali']],
+      body: productSales.value.map((p, i) => [
+        (i + 1).toString(),
+        p.name,
+        `x ${p.qty}`,
+        formatMoney(p.revenue)
+      ]),
+      theme: 'plain',
+      headStyles: { fillColor: [245, 245, 245], textColor: [100, 100, 100], fontSize: 9 },
+      styles: { fontSize: 10, cellPadding: 4 },
+      columnStyles: {
+        0: { cellWidth: 15, textColor: [150, 150, 150] },
+        1: { cellWidth: 90 },
+        2: { cellWidth: 30, textColor: [120, 120, 120] },
+        3: { cellWidth: 40, textColor: [5, 150, 105], fontStyle: 'bold' }
+      }
+    })
+  }
+
+  try {
+    const filePath = await save({
+      defaultPath: `raport_${selectedDate.value}.pdf`,
+      filters: [{ name: 'PDF', extensions: ['pdf'] }]
+    })
+
+    if (filePath) {
+      const pdfBytes = doc.output('arraybuffer')
+      await writeFile(filePath, new Uint8Array(pdfBytes))
+    }
+  } catch (e) {
+    console.error('PDF save failed:', e)
+  }
 }
 
 // ─── Monthly report ───
@@ -334,8 +320,96 @@ function formatDateShortWeekday(dateStr: string): string {
   return d.toLocaleDateString('sq-AL', { weekday: 'short' })
 }
 
-function printMonthly() {
-  window.print()
+// ─── PDF: Raporti mujor ───
+async function printMonthly() {
+  if (monthlyData.value.length === 0) return
+
+  const doc = new jsPDF()
+
+  doc.setFontSize(10)
+  doc.setTextColor(150)
+  doc.text('RAPORT MUJOR', 20, 20)
+
+  doc.setFontSize(20)
+  doc.setTextColor(50)
+  doc.text(settings.settings.venueName || 'Kendi Cafe', 20, 32)
+
+  doc.setFontSize(11)
+  doc.setTextColor(120)
+  doc.text(`${formatDateShort(monthlyFrom.value)} - ${formatDateShort(monthlyTo.value)}`, 20, 40)
+
+  // Totali i shitjeve (main)
+  doc.setDrawColor(110, 231, 183)
+  doc.setFillColor(240, 253, 244)
+  doc.roundedRect(20, 48, 170, 26, 3, 3, 'FD')
+  doc.setFontSize(10)
+  doc.setTextColor(120)
+  doc.text('Totali i shitjeve', 25, 57)
+  doc.setFontSize(18)
+  doc.setTextColor(5, 150, 105)
+  doc.text(formatMoney(monthlyTotals.value.revenue), 25, 68)
+
+  // Kesh
+  doc.setDrawColor(220)
+  doc.setFillColor(255, 255, 255)
+  doc.roundedRect(20, 78, 82, 24, 3, 3, 'FD')
+  doc.setFontSize(10)
+  doc.setTextColor(120)
+  doc.text('Kesh', 25, 87)
+  doc.setFontSize(14)
+  doc.setTextColor(50)
+  doc.text(formatMoney(monthlyTotals.value.cash), 25, 97)
+
+  // Karte
+  doc.roundedRect(108, 78, 82, 24, 3, 3, 'FD')
+  doc.setFontSize(10)
+  doc.setTextColor(120)
+  doc.text('Karte', 113, 87)
+  doc.setFontSize(14)
+  doc.setTextColor(50)
+  doc.text(formatMoney(monthlyTotals.value.card), 113, 97)
+
+  // Tabela ditore
+  autoTable(doc, {
+    startY: 110,
+    head: [['Data', 'Dite', 'Totali', 'Kesh', 'Karte']],
+    body: monthlyData.value.map(d => [
+      formatDateShort(d.date),
+      formatDateShortWeekday(d.date),
+      formatMoney(d.totalRevenue),
+      formatMoney(d.cashTotal),
+      formatMoney(d.cardTotal)
+    ]),
+    foot: [[
+      'TOTALI', '',
+      formatMoney(monthlyTotals.value.revenue),
+      formatMoney(monthlyTotals.value.cash),
+      formatMoney(monthlyTotals.value.card)
+    ]],
+    theme: 'plain',
+    headStyles: { fillColor: [245, 245, 245], textColor: [100, 100, 100], fontSize: 9 },
+    footStyles: { fillColor: [250, 250, 250], textColor: [50, 50, 50], fontStyle: 'bold' },
+    styles: { fontSize: 9, cellPadding: 3 },
+    columnStyles: {
+      2: { textColor: [5, 150, 105], fontStyle: 'bold', halign: 'right' },
+      3: { halign: 'right' },
+      4: { halign: 'right' }
+    }
+  })
+
+  try {
+    const filePath = await save({
+      defaultPath: `raport_mujor_${monthlyFrom.value}_${monthlyTo.value}.pdf`,
+      filters: [{ name: 'PDF', extensions: ['pdf'] }]
+    })
+
+    if (filePath) {
+      const pdfBytes = doc.output('arraybuffer')
+      await writeFile(filePath, new Uint8Array(pdfBytes))
+    }
+  } catch (e) {
+    console.error('PDF save failed:', e)
+  }
 }
 
 function sendToAccountant() {

@@ -2,6 +2,8 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { Search, Download, TrendingUp, TrendingDown, Phone, Armchair, Filter } from 'lucide-vue-next'
 import { useReservationsStore, type Reservation, type RangeStats } from '../../stores/reservations'
+import { save } from '@tauri-apps/plugin-dialog'
+import { writeTextFile } from '@tauri-apps/plugin-fs'
 
 const reservationsStore = useReservationsStore()
 
@@ -121,8 +123,7 @@ function statusColor(status: string): string {
   }
 }
 
-// Export si CSV
-function exportCsv() {
+async function exportCsv() {
   const headers = ['Date', 'Time', 'Guest', 'Phone', 'Table', 'Seats', 'Status', 'Requested by']
   const rows = filteredReservations.value.map(r => [
     formatDate(r.reservationTime),
@@ -134,18 +135,23 @@ function exportCsv() {
     statusLabel(r.status),
     r.requestedBy || ''
   ])
-  
+
   const csv = [headers, ...rows]
     .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
     .join('\n')
-  
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = `reservations_${fromDate.value}_${toDate.value}.csv`
-  link.click()
-  URL.revokeObjectURL(url)
+
+  try {
+    const filePath = await save({
+      defaultPath: `reservations_${fromDate.value}_${toDate.value}.csv`,
+      filters: [{ name: 'CSV', extensions: ['csv'] }]
+    })
+    
+    if (filePath) {
+      await writeTextFile(filePath, '\uFEFF' + csv)
+    }
+  } catch (e) {
+    console.error('Export failed:', e)
+  }
 }
 </script>
 
