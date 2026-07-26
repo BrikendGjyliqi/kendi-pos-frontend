@@ -1,64 +1,10 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { api } from '../api/client'
+import * as reservationsRepo from '../db/reservationsRepo'
 
-export type ReservationStatus =
-  | 'PENDING_REQUEST'
-  | 'CONFIRMED'
-  | 'ARRIVED'
-  | 'NO_SHOW'
-  | 'CANCELLED'
-  | 'DECLINED'
-
-export type Reservation = {
-  id: string
-  tableId: string
-  tableName: string
-  guestName: string
-  guestPhone: string | null
-  guestCount: number
-  reservationTime: string
-  status: ReservationStatus
-  requestedBy: string | null
-  confirmedAt: string | null
-  arrivedAt: string | null
-  noShowAt: string | null
-  createdAt: string
-}
-
-type BackendReservation = {
-  id: number
-  tableId: number
-  tableName: string
-  guestName: string
-  guestPhone: string | null
-  guestCount: number
-  reservationTime: string
-  status: ReservationStatus
-  requestedBy: string | null
-  confirmedAt: string | null
-  arrivedAt: string | null
-  noShowAt: string | null
-  createdAt: string
-}
-
-function fromBackend(r: BackendReservation): Reservation {
-  return {
-    id: String(r.id),
-    tableId: String(r.tableId),
-    tableName: r.tableName,
-    guestName: r.guestName,
-    guestPhone: r.guestPhone,
-    guestCount: r.guestCount,
-    reservationTime: r.reservationTime,
-    status: r.status,
-    requestedBy: r.requestedBy,
-    confirmedAt: r.confirmedAt,
-    arrivedAt: r.arrivedAt,
-    noShowAt: r.noShowAt,
-    createdAt: r.createdAt
-  }
-}
+export type ReservationStatus = reservationsRepo.ReservationStatus
+export type Reservation = reservationsRepo.Reservation
 
 export type ReservationStats = {
   arrivedToday: number
@@ -88,7 +34,6 @@ export const useReservationsStore = defineStore('reservations', () => {
   })
   const loaded = ref(false)
 
-  // Filter per status
   const pending = computed(() =>
     reservations.value.filter(r => r.status === 'PENDING_REQUEST')
   )
@@ -102,27 +47,46 @@ export const useReservationsStore = defineStore('reservations', () => {
   const pendingCount = computed(() => pending.value.length)
   const confirmedCount = computed(() => confirmed.value.length)
 
+  // ─────────────────────────────────────────────────────────
+  // OFFLINE-FIRST: Load nga SQLite + sync ne background
+  // ─────────────────────────────────────────────────────────
   async function load() {
     if (loaded.value) return
-    await reload()
+    const repoData = await reservationsRepo.getAll()
+    reservations.value = repoData
     loaded.value = true
+    console.log(`[Reservations Store] Loaded ${reservations.value.length} reservations (offline-first)`)
+
+    // Auto-refresh ne background
+    setTimeout(async () => {
+      try {
+        const fresh = await reservationsRepo.refresh()
+        reservations.value = fresh
+        await loadStats()
+      } catch {
+        // silent - offline
+      }
+    }, 1000)
   }
 
   async function reload() {
-    const raw = await api.get<BackendReservation[]>('/reservations')
-    reservations.value = raw.map(fromBackend)
+    const fresh = await reservationsRepo.refresh()
+    reservations.value = fresh
     await loadStats()
   }
 
   async function loadStats() {
+    // Stats vetem online - llogaritja backend
     try {
       stats.value = await api.get<ReservationStats>('/reservations/stats/today')
     } catch {
-      // silent
+      // silent - kur backend jonpe, stats mbeten njesoj
     }
   }
 
-  // Kamarier krijoi kerkese
+  // ─────────────────────────────────────────────────────────
+  // Kamerier krijoi kerkese
+  // ─────────────────────────────────────────────────────────
   async function createRequest(data: {
     tableId: string
     guestName: string
@@ -131,63 +95,76 @@ export const useReservationsStore = defineStore('reservations', () => {
     reservationTime: string
     requestedBy?: string
   }): Promise<Reservation> {
-    const raw = await api.post<BackendReservation>('/reservations/requests', {
-      tableId: Number(data.tableId),
-      guestName: data.guestName.trim(),
-      guestPhone: data.guestPhone || null,
+    const newRes = await reservationsRepo.createRequest({
+      tableId: data.tableId,
+      guestName: data.guestName,
+      guestPhone: data.guestPhone ?? null,
       guestCount: data.guestCount,
       reservationTime: data.reservationTime,
-      requestedBy: data.requestedBy || null
+      requestedBy: data.requestedBy ?? null
     })
-    const newRes = fromBackend(raw)
-    reservations.value.push(newRes)
+
+    // Update in-memory list
+    const idx = reservations.value.findIndex(r => r.id === newRes.id)
+    if (idx >= 0) reservations.value[idx] = newRes
+    else reservations.value.push(newRes)
+
     return newRes
   }
 
-  // Admin veprime
-  async function confirm(id: string): Promise<Reservation> {
-    const raw = await api.patch<BackendReservation>(`/reservations/${id}/confirm`)
-    return updateInList(raw)
-  }
-
-  async function decline(id: string): Promise<Reservation> {
-    const raw = await api.patch<BackendReservation>(`/reservations/${id}/decline`)
-    return updateInList(raw)
-  }
-
-  async function markArrived(id: string): Promise<Reservation> {
-    const raw = await api.patch<BackendReservation>(`/reservations/${id}/arrived`)
-    return updateInList(raw)
-  }
-
-  async function markNoShow(id: string): Promise<Reservation> {
-    const raw = await api.patch<BackendReservation>(`/reservations/${id}/no-show`)
-    return updateInList(raw)
-  }
-
-  function updateInList(raw: BackendReservation): Reservation {
-    const updated = fromBackend(raw)
-    const idx = reservations.value.findIndex(r => r.id === updated.id)
-    if (idx >= 0) reservations.value[idx] = updated
-    else reservations.value.push(updated)
+  // ─────────────────────────────────────────────────────────
+  // Admin actions
+  // ─────────────────────────────────────────────────────────
+  async function confirm(id: string): Promise<Reservation | null> {
+    const updated = await reservationsRepo.confirm(id)
+    if (!updated) return null
+    updateInList(updated)
     return updated
   }
 
-  // Historik
-async function loadHistory(status?: string, from?: string, to?: string): Promise<Reservation[]> {
-  const params = new URLSearchParams()
-  if (status) params.append('status', status)
-  if (from) params.append('from', from)
-  if (to) params.append('to', to)
-  
-  const query = params.toString() ? '?' + params.toString() : ''
-  const raw = await api.get<BackendReservation[]>('/reservations/history' + query)
-  return raw.map(fromBackend)
-}
+  async function decline(id: string): Promise<Reservation | null> {
+    const updated = await reservationsRepo.decline(id)
+    if (!updated) return null
+    updateInList(updated)
+    return updated
+  }
 
-async function loadRangeStats(from: string, to: string) {
-  return await api.get<RangeStats>(`/reservations/stats/range?from=${from}&to=${to}`)
-}
+  async function markArrived(id: string): Promise<Reservation | null> {
+    const updated = await reservationsRepo.markArrived(id)
+    if (!updated) return null
+    updateInList(updated)
+    return updated
+  }
+
+  async function markNoShow(id: string): Promise<Reservation | null> {
+    const updated = await reservationsRepo.markNoShow(id)
+    if (!updated) return null
+    updateInList(updated)
+    return updated
+  }
+
+  function updateInList(updated: Reservation): void {
+    const idx = reservations.value.findIndex(r => r.id === updated.id)
+    if (idx >= 0) reservations.value[idx] = updated
+    else reservations.value.push(updated)
+  }
+
+  // ─────────────────────────────────────────────────────────
+  // History dhe stats - vetem online (analytics)
+  // ─────────────────────────────────────────────────────────
+  async function loadHistory(status?: string, from?: string, to?: string): Promise<Reservation[]> {
+    const params = new URLSearchParams()
+    if (status) params.append('status', status)
+    if (from) params.append('from', from)
+    if (to) params.append('to', to)
+    
+    const query = params.toString() ? '?' + params.toString() : ''
+    return await api.get<Reservation[]>('/reservations/history' + query)
+  }
+
+  async function loadRangeStats(from: string, to: string): Promise<RangeStats> {
+    return await api.get<RangeStats>(`/reservations/stats/range?from=${from}&to=${to}`)
+  }
 
   return {
     reservations,

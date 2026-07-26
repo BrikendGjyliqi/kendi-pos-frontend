@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { api } from '../api/client'
+import * as tablesRepo from '../db/tablesRepo'
 
 export type Section = 'MAIN_DINING' | 'TERRACE' | 'OUTDOOR'
 export type TableStatus = 'AVAILABLE' | 'ON_DINE' | 'RESERVED'
@@ -10,7 +10,6 @@ export type Table = {
   name: string
   sortOrder: number
   createdAt: number
-  // Fusha te reja (opsionale per backwards compatibility)
   seatCount?: number
   section?: Section
   status?: TableStatus
@@ -19,23 +18,9 @@ export type Table = {
   size?: number
 }
 
-// Backend kthen id si numer, po frontend perdor string
-type BackendTable = {
-  id: number
-  name: string
-  seatCount: number
-  section: Section
-  status: TableStatus
-  positionX: number
-  positionY: number
-  sortOrder: number
-  createdAt: number
-  size?: number
-}
-
-function fromBackend(t: BackendTable): Table {
+function toTable(t: tablesRepo.Table): Table {
   return {
-    id: String(t.id),
+    id: t.id,
     name: t.name,
     sortOrder: t.sortOrder,
     createdAt: t.createdAt,
@@ -61,12 +46,10 @@ export const useTablesStore = defineStore('tables', () => {
     tables.value.find(t => t.id === selectedId.value) ?? null
   )
 
-  // Filter sipas seksionit (per Manage Tables)
   const bySection = computed(() => (section: Section) =>
     sorted.value.filter(t => t.section === section)
   )
 
-  // Statistika per header
   const stats = computed(() => {
     const total = tables.value.length
     const available = tables.value.filter(t => t.status === 'AVAILABLE').length
@@ -83,37 +66,50 @@ export const useTablesStore = defineStore('tables', () => {
     selectedId.value = id
   }
 
+  // ─────────────────────────────────────────────────────────
+  // OFFLINE-FIRST
+  // ─────────────────────────────────────────────────────────
   async function load() {
     if (loaded.value) return
-    const raw = await api.get<BackendTable[]>('/tables')
-    tables.value = raw.map(fromBackend)
+    const repoTables = await tablesRepo.getAll()
+    tables.value = repoTables.map(toTable)
     loaded.value = true
+    console.log(`[Tables Store] Loaded ${tables.value.length} tables (offline-first)`)
+
+    // Auto-refresh ne background
+    setTimeout(async () => {
+      try {
+        const fresh = await tablesRepo.refresh()
+        tables.value = fresh.map(toTable)
+        console.log(`[Tables Store] Auto-refreshed ${fresh.length} tables`)
+      } catch {
+        // silent
+      }
+    }, 1000)
   }
 
   async function reload() {
-    const raw = await api.get<BackendTable[]>('/tables')
-    tables.value = raw.map(fromBackend)
+    const fresh = await tablesRepo.refresh()
+    tables.value = fresh.map(toTable)
   }
 
-  // Krijim me fusha te reja (per Manage Tables)
   async function createFull(data: {
     name: string
     seatCount: number
     section: Section
   }): Promise<Table> {
     const maxOrder = tables.value.reduce((m, t) => Math.max(m, t.sortOrder), 0)
-    const raw = await api.post<BackendTable>('/tables', {
+    const created = await tablesRepo.create({
       name: data.name.trim(),
       seatCount: data.seatCount,
       section: data.section,
       sortOrder: maxOrder + 1
     })
-    const newTable = fromBackend(raw)
-    tables.value.push(newTable)
-    return newTable
+    const table = toTable(created)
+    tables.value.push(table)
+    return table
   }
 
-  // Metoda e vjeter (per kompatibilitet me TablesView aktual)
   async function create(name: string): Promise<Table> {
     return createFull({
       name,
@@ -123,43 +119,35 @@ export const useTablesStore = defineStore('tables', () => {
   }
 
   async function update(id: string, changes: Partial<Pick<Table, 'name' | 'sortOrder' | 'seatCount' | 'section'>>) {
-    const existing = tables.value.find(t => t.id === id)
-    if (!existing) return
-    const payload = {
-      name: changes.name?.trim() ?? existing.name,
-      seatCount: changes.seatCount ?? existing.seatCount ?? 4,
-      section: changes.section ?? existing.section ?? 'MAIN_DINING',
-      sortOrder: changes.sortOrder ?? existing.sortOrder
-    }
-    const raw = await api.put<BackendTable>(`/tables/${id}`, payload)
-    const updated = fromBackend(raw)
+    const updated = await tablesRepo.update(id, changes)
+    if (!updated) return
     const idx = tables.value.findIndex(t => t.id === id)
-    if (idx >= 0) tables.value[idx] = updated
+    if (idx >= 0) tables.value[idx] = toTable(updated)
   }
 
   async function updateStatus(id: string, status: TableStatus) {
-    const raw = await api.patch<BackendTable>(`/tables/${id}/status`, { status })
-    const updated = fromBackend(raw)
+    const updated = await tablesRepo.updateStatus(id, status)
+    if (!updated) return
     const idx = tables.value.findIndex(t => t.id === id)
-    if (idx >= 0) tables.value[idx] = updated
+    if (idx >= 0) tables.value[idx] = toTable(updated)
   }
 
   async function updatePosition(id: string, positionX: number, positionY: number) {
-    const raw = await api.patch<BackendTable>(`/tables/${id}/position`, { positionX, positionY })
-    const updated = fromBackend(raw)
+    const updated = await tablesRepo.updatePosition(id, positionX, positionY)
+    if (!updated) return
     const idx = tables.value.findIndex(t => t.id === id)
-    if (idx >= 0) tables.value[idx] = updated
+    if (idx >= 0) tables.value[idx] = toTable(updated)
   }
 
   async function updateSize(id: string, size: number) {
-  const raw = await api.patch<BackendTable>(`/tables/${id}/size`, { size })
-  const updated = fromBackend(raw)
-  const idx = tables.value.findIndex(t => t.id === id)
-  if (idx >= 0) tables.value[idx] = updated
-}
+    const updated = await tablesRepo.updateSize(id, size)
+    if (!updated) return
+    const idx = tables.value.findIndex(t => t.id === id)
+    if (idx >= 0) tables.value[idx] = toTable(updated)
+  }
 
   async function remove(id: string) {
-    await api.delete(`/tables/${id}`)
+    await tablesRepo.remove(id)
     tables.value = tables.value.filter(t => t.id !== id)
   }
 
@@ -180,7 +168,7 @@ export const useTablesStore = defineStore('tables', () => {
     update,
     updateStatus,
     updatePosition,
-    remove,
-    updateSize
+    updateSize,
+    remove
   }
 })
