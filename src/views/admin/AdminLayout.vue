@@ -4,7 +4,7 @@ import { useRouter, RouterView, RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../../stores/auth'
 import { useSettingsStore } from '../../stores/settings'
-import { ArrowLeft, UtensilsCrossed, Users, Settings as SettingsIcon, Sun, Moon, LogOut, History, BarChart2, UserCheck, Package, Truck, ClipboardList, LayoutGrid, CalendarClock,Archive} from 'lucide-vue-next'
+import { ArrowLeft, UtensilsCrossed, Users, Settings as SettingsIcon, Sun, Moon, LogOut, History, BarChart2, UserCheck, Package, Truck, ClipboardList, LayoutGrid, CalendarClock,Archive,Sparkles} from 'lucide-vue-next'
  
 
 const { t } = useI18n()
@@ -93,6 +93,10 @@ function logout() {
         <RouterLink to="/admin/staff-report" class="nav-link">
           <UserCheck :size="18" />
           {{ t('nav.staffReport') }}
+        </RouterLink>
+        <RouterLink to="/admin/ai-assistant" class="nav-link">
+          <Sparkles :size="18" />
+          Ask AI
         </RouterLink>
       </nav>
 

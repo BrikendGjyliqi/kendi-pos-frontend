@@ -88,6 +88,11 @@ const router = createRouter({
           path: 'staff-report',
           name: 'admin-staff-report',
           component: () => import('../views/admin/StaffReportView.vue')
+        },
+        {
+          path: 'ai-assistant',
+          name: 'admin-ai-assistant',
+          component: () => import('../views/admin/AIAssistantView.vue')
         }
       ]
     },
